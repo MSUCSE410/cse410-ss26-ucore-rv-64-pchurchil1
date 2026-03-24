@@ -3,8 +3,11 @@
 #include "loader.h"
 #include "trap.h"
 #include "vm.h"
+#include "timer.h"
 
 struct proc pool[NPROC];
+char kstack[NPROC][PAGE_SIZE];
+
 __attribute__((aligned(16))) char kstack[NPROC][PAGE_SIZE];
 __attribute__((aligned(4096))) char trapframe[NPROC][TRAP_PAGE_SIZE];
 
@@ -33,9 +36,19 @@ void proc_init(void)
 		/*
 		* LAB1: you may need to initialize your new fields of proc here
 		*/
+		p->pagetable = 0;
+        p->max_page = 0;
+
+        for (int i = 0; i < MAX_SYSCALL_NUM; i++) {
+            p->syscall_times[i] = 0;
+        }
+        p->start_time = 0;
 	}
 	idle.kstack = (uint64)boot_stack_top;
 	idle.pid = 0;
+	idle.pagetable = 0;
+    idle.max_page = 0;
+    idle.start_time = 0;
 	current_proc = &idle;
 }
 
@@ -64,9 +77,14 @@ found:
 	p->pagetable = 0;
 	p->ustack = 0;
 	p->max_page = 0;
-	memset(&p->context, 0, sizeof(p->context));
-	memset((void *)p->kstack, 0, KSTACK_SIZE);
-	memset((void *)p->trapframe, 0, TRAP_PAGE_SIZE);
+
+	for (int i = 0; i < MAX_SYSCALL_NUM; i++) {
+        p->syscall_times[i] = 0;
+    }
+
+	// memset(&p->context, 0, sizeof(p->context));
+	// memset((void *)p->kstack, 0, KSTACK_SIZE);
+	// memset((void *)p->trapframe, 0, TRAP_PAGE_SIZE);
 	p->context.ra = (uint64)usertrapret;
 	p->context.sp = p->kstack + KSTACK_SIZE;
 	return p;
@@ -87,6 +105,9 @@ void scheduler(void)
 				* LAB1: you may need to init proc start time here
 				*/
 				p->state = RUNNING;
+				if (p->start_time == 0) {
+                    p->start_time = get_cycle();
+                }
 				current_proc = p;
 				swtch(&idle.context, &p->context);
 			}
