@@ -113,6 +113,81 @@ uint64 sys_set_priority(long long prio){
     return set_priority(prio);
 }
 
+uint64 sys_mmap(void *start, uint64 len, int port, int flag, int fd)
+{
+    (void)flag;
+    (void)fd;
+
+    struct proc *p = curr_proc();
+    uint64 va = (uint64)start;
+
+    if (len == 0)
+        return 0;
+
+    // must be page aligned
+    if (va % PGSIZE != 0)
+        return -1;
+
+    // upper limit 1 GiB
+    if (len > (1UL << 30))
+        return -1;
+
+    // valid port bits only: low 3 bits, and not all zero
+    if ((port & ~0x7) != 0)
+        return -1;
+    if ((port & 0x7) == 0)
+        return -1;
+
+    uint64 end = PGROUNDUP(va + len);
+    int perm = port_to_pte_perm(port);
+
+    // first pass: ensure every page is unmapped
+    for (uint64 a = va; a < end; a += PGSIZE) {
+        if (walkaddr(p->pagetable, a) != 0) {
+            return -1;
+        }
+    }
+
+    // second pass: allocate and map one page at a time
+    for (uint64 a = va; a < end; a += PGSIZE) {
+        void *pa = kalloc();
+        if (pa == 0) {
+            return -1;
+        }
+        memset(pa, 0, PGSIZE);
+
+        if (mappages(p->pagetable, a, PGSIZE, (uint64)pa, perm) != 0) {
+            kfree(pa);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+uint64 sys_munmap(void *start, uint64 len)
+{
+    struct proc *p = curr_proc();
+    uint64 va = (uint64)start;
+
+    if (len == 0)
+        return 0;
+
+    if (va % PGSIZE != 0)
+        return -1;
+
+    uint64 end = PGROUNDUP(va + len);
+
+    // verify whole interval is mapped first
+    for (uint64 a = va; a < end; a += PGSIZE) {
+        if (walkaddr(p->pagetable, a) == 0) {
+            return -1;
+        }
+    }
+
+    uvmunmap(p->pagetable, va, (end - va) / PGSIZE, 1);
+    return 0;
+}
 
 extern char trap_page[];
 
