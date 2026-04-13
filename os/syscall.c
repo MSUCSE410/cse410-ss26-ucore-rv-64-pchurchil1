@@ -215,6 +215,12 @@ void syscall()
 	case SYS_gettimeofday:
 		ret = sys_gettimeofday(args[0], args[1]);
 		break;
+	case SYS_mmap:
+        ret = sys_mmap((void *)args[0], args[1], (int)args[2], (int)args[3], (int)args[4]);
+        break;
+    case SYS_munmap:
+        ret = sys_munmap((void *)args[0], args[1]);
+        break;
 	case SYS_getpid:
 		ret = sys_getpid();
 		break;
