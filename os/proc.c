@@ -264,6 +264,19 @@ int spawn(char *name)
 	return np->pid;
 }
 
+int set_priority(long long prio)
+{
+	struct proc *p = curr_proc();
+
+	//Valid priorities are limited to >2 (ucore)
+	if (prio < 2)
+		return -1;
+
+	// Update process's priority value 
+	p->pass = BIG_STRIDE / (uint64)prio;
+	return (int)prio; //Return new priority
+}
+
 int push_argv(struct proc *p, char **argv)
 {
 	uint64 argc, ustack[MAX_ARG_NUM + 1];
