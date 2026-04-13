@@ -6,6 +6,17 @@
 #include "timer.h"
 #include "trap.h"
 
+static int port_to_pte_perm(int port)
+{
+    int perm = PTE_U;
+
+    if (port & 0x1) perm |= PTE_R;
+    if (port & 0x2) perm |= PTE_W;
+    if (port & 0x4) perm |= PTE_X;
+
+    return perm;
+}
+
 uint64 sys_write(int fd, uint64 va, uint len)
 {
 	debugf("sys_write fd = %d str = %x, len = %d", fd, va, len);
