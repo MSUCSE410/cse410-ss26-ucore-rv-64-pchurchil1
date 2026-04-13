@@ -83,6 +83,11 @@ found:
 	p->max_page = 0;
 	p->parent = NULL;
 	p->exit_code = 0;
+
+	// ADDED: Declaration of stride and pass value
+	p->stride = 0; //Initial stride is 0 according to ucore
+	p->pass = BIG_STRIDE / DEFAULT_PRIORITY; //Initial priotity (pass value) = 16
+
 	p->pagetable = uvmcreate((uint64)p->trapframe);
 	memset(&p->context, 0, sizeof(p->context));
 	memset((void *)p->kstack, 0, KSTACK_SIZE);
@@ -97,31 +102,31 @@ found:
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+//ADDED: Switched from FIFO queue to stride scheduling
 void scheduler()
 {
 	struct proc *p;
+	struct proc *best;
+
 	for (;;) {
-		/*int has_proc = 0;
+		best = NULL;
+
 		for (p = pool; p < &pool[NPROC]; p++) {
-			if (p->state == RUNNABLE) {
-				has_proc = 1;
-				tracef("swtich to proc %d", p - pool);
-				p->state = RUNNING;
-				current_proc = p;
-				swtch(&idle.context, &p->context);
-			}
+			if (p->state != RUNNABLE)
+				continue;
+			if (best == NULL || p->stride < best->stride)
+				best = p;
 		}
-		if(has_proc == 0) {
-			panic("all app are over!\n");
-		}*/
-		p = fetch_task();
-		if (p == NULL) {
+
+		if (best == NULL) {
 			panic("all app are over!\n");
 		}
-		tracef("swtich to proc %d", p - pool);
-		p->state = RUNNING;
-		current_proc = p;
-		swtch(&idle.context, &p->context);
+
+		tracef("switch to proc %d", best - pool);
+		best->state = RUNNING;
+		current_proc = best;
+		best->stride += best->pass;
+		swtch(&idle.context, &best->context);
 	}
 }
 
@@ -144,7 +149,7 @@ void sched()
 void yield()
 {
 	current_proc->state = RUNNABLE;
-	add_task(current_proc);
+//REMOVED:	add_task(current_proc); Leave queuing to the scheduler
 	sched();
 }
 
@@ -184,8 +189,48 @@ int fork()
 	np->trapframe->a0 = 0;
 	np->parent = p;
 	np->state = RUNNABLE;
-	add_task(np);
+//REMOVED: Queue logic	add_task(np);
 	return np->pid;
+}
+
+//ADDED: 
+int spawn(char *name)
+{
+	struct proc *p = curr_proc();
+	struct proc *np;
+	int id = get_id_by_name(name);
+
+	// ensure the process exists in table
+	if (id < 0)
+		return -1;
+	// Allocate a fresh process structure for the child
+	np = allocproc();
+	if (np == 0)
+		return -1;
+	//define the parent-child relationship<- wait() doesn't work wthout it
+	np->parent = p;
+
+	// Load the requested executable directly into the new child instead of copying
+	if (loader(id, np) < 0) {
+		freeproc(np);
+		return -1;
+	}
+	// Child state = runnable
+	np->state = RUNNABLE;
+	return np->pid; //Child's PID
+}
+
+int set_priority(long long prio)
+{
+	struct proc *p = curr_proc();
+
+	//Valid priorities are limited to >2 (ucore)
+	if (prio < 2)
+		return -1;
+
+	// Update process's priority value 
+	p->pass = BIG_STRIDE / (uint64)prio;
+	return (int)prio; //Return new priority
 }
 
 int exec(char *name)
@@ -226,7 +271,7 @@ int wait(int pid, int *code)
 			return -1;
 		}
 		p->state = RUNNABLE;
-		add_task(p);
+//REMOVED: queue logic		add_task(p);
 		sched();
 	}
 }

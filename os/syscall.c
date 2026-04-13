@@ -95,12 +95,22 @@ uint64 sys_wait(int pid, uint64 va)
 uint64 sys_spawn(uint64 va)
 {
 	// TODO: your job is to complete the sys call
-	return -1;
+    //ADDED: completed syscall
+    struct proc *p = curr_proc();
+    char name[200];
+
+    // Copy the program name string from user space into a kernel bufer
+    if (copyinstr(p->pagetable, name, va, 200) < 0)
+        return -1;
+
+    // Create a fresh child process and directly load the named program
+    return spawn(name);
 }
 
 uint64 sys_set_priority(long long prio){
     // TODO: your job is to complete the sys call
-    return -1;
+    //ADDED: Call to setpriority
+    return set_priority(prio);
 }
 
 
@@ -148,6 +158,11 @@ void syscall()
 	case SYS_spawn:
 		ret = sys_spawn(args[0]);
 		break;
+    case SYS_setpriority:
+        // ADDED: Handler for priority-setting syscall
+        // args[0] =  the requested priority value
+        ret = sys_set_priority(args[0]);
+        break;
 	default:
 		ret = -1;
 		errorf("unknown syscall %d", id);
