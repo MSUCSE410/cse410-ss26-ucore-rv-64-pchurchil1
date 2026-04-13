@@ -225,6 +225,33 @@ int fork()
 	return np->pid;
 }
 
+//ADDED: 
+int spawn(char *name)
+{
+	struct proc *p = curr_proc();
+	struct proc *np;
+	int id = get_id_by_name(name);
+
+	// ensure the process exists in table
+	if (id < 0)
+		return -1;
+	// Allocate a fresh process structure for the child
+	np = allocproc();
+	if (np == 0)
+		return -1;
+	//define the parent-child relationship<- wait() doesn't work wthout it
+	np->parent = p;
+
+	// Load the requested executable directly into the new child instead of copying
+	if (loader(id, np) < 0) {
+		freeproc(np);
+		return -1;
+	}
+	// Child state = runnable
+	np->state = RUNNABLE;
+	return np->pid; //Child's PID
+}
+
 int push_argv(struct proc *p, char **argv)
 {
 	uint64 argc, ustack[MAX_ARG_NUM + 1];
