@@ -205,7 +205,6 @@ int sys_unlinkat(int dirfd, uint64 name, uint64 flags){
 }
 
 uint64 sys_set_priority(long long prio){
-    // TODO: your job is to complete the sys call
     //ADDED: Call to setpriority
     return set_priority(prio);
 }

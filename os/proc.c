@@ -230,26 +230,38 @@ int spawn(char *name)
 {
 	struct proc *p = curr_proc();
 	struct proc *np;
-	int id = get_id_by_name(name);
+	struct inode *ip;
+	int ret;
 
-	// ensure the process exists in table
-	if (id < 0)
+	// Look up executable by name in the file system
+	ip = namei(name);
+	if (ip == 0)
 		return -1;
-	// Allocate a fresh process structure for the child
+
+	// Allocate child process
 	np = allocproc();
-	if (np == 0)
+	if (np == 0) {
+		iput(ip);
 		return -1;
-	//define the parent-child relationship<- wait() doesn't work wthout it
+	}
+
+	// Set parent so wait() works
 	np->parent = p;
 
-	// Load the requested executable directly into the new child instead of copying
-	if (loader(id, np) < 0) {
+	// Load executable from inode into child
+	ret = bin_loader(ip, np);
+
+	// Release inode reference after loading
+	iput(ip);
+
+	if (ret < 0) {
 		freeproc(np);
 		return -1;
 	}
-	// Child state = runnable
+
+	// Child is ready to run
 	np->state = RUNNABLE;
-	return np->pid; //Child's PID
+	return np->pid;
 }
 
 int push_argv(struct proc *p, char **argv)
