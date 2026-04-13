@@ -3,9 +3,15 @@
 
 #include "riscv.h"
 #include "types.h"
+#include "queue.h"
 
 #define NPROC (512)
 #define FD_BUFFER_SIZE (16)
+
+// ADDED: Declarations of Default priotity
+// And big stride
+#define BIG_STRIDE 65536
+#define DEFAULT_PRIORITY 16
 
 struct file;
 
@@ -43,8 +49,12 @@ struct proc {
 	uint64 max_page;
 	struct proc *parent; // Parent process
 	uint64 exit_code;
-	struct file *files
-		[FD_BUFFER_SIZE]; //File descriptor table, using to record the files opened by the process
+
+	// ADDED: Stride/Priority state to support priotity scheduling
+	uint64 stride;
+	uint64 pass;
+
+	struct file *files[FD_BUFFER_SIZE];
 };
 
 int cpuid();
@@ -65,5 +75,9 @@ int init_stdio(struct proc *);
 int push_argv(struct proc *, char **);
 // swtch.S
 void swtch(struct context *, struct context *);
+
+//Functions to set priority and spawn process
+int set_priority(long long prio);
+int spawn(char *name);
 
 #endif // PROC_H
