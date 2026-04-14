@@ -189,23 +189,64 @@ uint64 sys_close(int fd)
 	return 0;
 }
 
+// ADDED: implement fstat syscall for Project 4
 int sys_fstat(int fd,uint64 stat){
-	//TODO: your job is to complete the syscall
-	return -1;
+	struct proc *p = curr_proc();
+	struct file *f;
+	Stat st;
+
+	if (fd < 0 || fd >= FD_BUFFER_SIZE)
+		return -1;
+
+	f = p->files[fd];
+	if (f == NULL)
+		return -1;
+
+	if (filestat(f, &st) < 0)
+		return -1;
+
+	if (copyout(p->pagetable, stat, (char *)&st, sizeof(st)) < 0)
+		return -1;
+
+	return 0;
 }
 
+// ADDED: implement hard-link syscall
 int sys_linkat(int olddirfd, uint64 oldpath, int newdirfd, uint64 newpath, uint64 flags){
-	//TODO: your job is to complete the syscall
-	return -1;
+	// flags for compatibility
+	(void)olddirfd;
+	(void)newdirfd;
+	(void)flags;
+
+	struct proc *p = curr_proc();
+	char oldname[MAX_STR_LEN];
+	char newname[MAX_STR_LEN];
+
+	if (copyinstr(p->pagetable, oldname, oldpath, MAX_STR_LEN) < 0)
+		return -1;
+	if (copyinstr(p->pagetable, newname, newpath, MAX_STR_LEN) < 0)
+		return -1;
+
+	return filelink(oldname, newname);
 }
 
+// ADDED: implement unlink syscall
 int sys_unlinkat(int dirfd, uint64 name, uint64 flags){
-	//TODO: your job is to complete the syscall
-	return -1;
+	// flags for compatibility
+	(void)dirfd;
+	(void)flags;
+
+	struct proc *p = curr_proc();
+	char path[MAX_STR_LEN];
+
+	if (copyinstr(p->pagetable, path, name, MAX_STR_LEN) < 0)
+		return -1;
+
+	return fileunlink(path);
 }
 
 uint64 sys_set_priority(long long prio){
-    //ADDED: Call to setpriority
+    //Call to setpriority
     return set_priority(prio);
 }
 
@@ -346,6 +387,7 @@ void syscall()
 		break;
 	case SYS_unlinkat:
 	    ret = sys_unlinkat(args[0],args[1],args[2]);
+		break;
 	case SYS_spawn:
 		ret = sys_spawn(args[0]);
 		break;

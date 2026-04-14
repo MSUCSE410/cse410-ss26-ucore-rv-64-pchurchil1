@@ -154,3 +154,97 @@ uint64 inoderead(struct file *f, uint64 va, uint64 len)
 		f->off += r;
 	return r;
 }
+
+// ADDED: fill a stat structure for an open inode-backed file
+int filestat(struct file *f, Stat *st)
+{
+	if (f == 0 || st == 0)
+		return -1;
+	if (f->type != FD_INODE || f->ip == 0)
+		return -1;
+
+	ivalid(f->ip);
+
+	st->dev = 0; // project says this can be written as 0 for now (?)
+	st->ino = f->ip->inum;
+	st->nlink = f->ip->nlink;
+	st->mode = (f->ip->type == T_DIR) ? DIR : FILE;
+
+	return 0;
+}
+
+// ADDED: create a hard link newpath -> oldpath
+int filelink(char *oldpath, char *newpath)
+{
+	struct inode *dp;
+	struct inode *ip;
+
+	// Reject linking a file to the same name
+	if (strncmp(oldpath, newpath, DIRSIZ) == 0)
+		return -1;
+
+	dp = root_dir();
+	ivalid(dp);
+
+	ip = dirlookup(dp, oldpath, 0);
+	if (ip == 0) {
+		iput(dp);
+		return -1; // source file does not exist
+	}
+
+	ivalid(ip);
+
+	//increase hard-link count before publishing the new name
+	ip->nlink++;
+	iupdate(ip);
+
+	// create another dirent that points to the same inode
+	if (dirlink(dp, newpath, ip->inum) < 0) {
+		//Roll back nlink if fail
+		ip->nlink--;
+		iupdate(ip);
+		iput(ip);
+		iput(dp);
+		return -1;
+	}
+
+	iput(ip);
+	iput(dp);
+	return 0;
+}
+
+// ADDED: unlink one filename from the root directory
+int fileunlink(char *path)
+{
+	struct inode *ip;
+	struct inode *dp;
+
+	dp = root_dir();
+	ivalid(dp);
+
+	ip = dirlookup(dp, path, 0);
+	if (ip == 0) {
+		iput(dp);
+		return -1; // file does not exist
+	}
+
+	ivalid(ip);
+
+	if (dirunlink(dp, path) < 0) {
+		iput(ip);
+		iput(dp);
+		return -1;
+	}
+	
+	//drop one hard link and persist the new count.
+	if (ip->nlink < 1)
+		panic("fileunlink: nlink underflow");
+
+	ip->nlink--;
+	iupdate(ip);
+
+	//iput() will reclaim inode/data if nlink reaches zero.
+	iput(ip);
+	iput(dp);
+	return 0;
+}

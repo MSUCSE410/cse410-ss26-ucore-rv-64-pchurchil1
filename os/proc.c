@@ -185,7 +185,7 @@ void freeproc(struct proc *p)
 	if (p->pagetable)
 		freepagetable(p->pagetable, p->max_page);
 	p->pagetable = 0;
-	for (int i = 0; i > FD_BUFFER_SIZE; i++) {
+	for (int i = 0; i < FD_BUFFER_SIZE; i++) {
 		if (p->files[i] != NULL) {
 			fileclose(p->files[i]);
 		}
@@ -245,6 +245,15 @@ int spawn(char *name)
 		return -1;
 	}
 
+	// Inherit open files, including stdin/stdout/stderr
+	for (int i = 0; i < FD_BUFFER_SIZE; i++) {
+		if (p->files[i] != NULL) {
+			p->files[i]->ref++;
+			np->files[i] = p->files[i];
+		}
+	}
+
+
 	// Set parent so wait() works
 	np->parent = p;
 
@@ -255,12 +264,20 @@ int spawn(char *name)
 	iput(ip);
 
 	if (ret < 0) {
+		// Undo file refs we copied
+		for (int i = 0; i < FD_BUFFER_SIZE; i++) {
+			if (np->files[i] != NULL) {
+				fileclose(np->files[i]);
+				np->files[i] = NULL;
+			}
+		}
 		freeproc(np);
 		return -1;
 	}
 
 	// Child is ready to run
 	np->state = RUNNABLE;
+	add_task(np);
 	return np->pid;
 }
 
